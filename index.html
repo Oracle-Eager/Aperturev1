@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#101012">
+    <title>Aperture Private Environment</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mozilla/readability@0.5.0/Readability.min.js" defer></script>
+    <style>
+        :root {
+            --bg-color: #0A0A0C; --surface-color: #18181B; --header-bg: #101012;
+            --header-bg-glass: rgba(16, 16, 18, 0.7); --border-color: #2a2a2e;
+            --text-color: #f0f0f5; --text-secondary-color: #909098; --accent-color: #00e0c6;
+            --accent-hover-color: #00b39e; --error-color: #ff5b5b; --shadow-dark: rgba(0, 0, 0, 0.5);
+            --glow-shadow: 0 0 25px rgba(0, 224, 198, 0.2), 0 0 40px rgba(0, 224, 198, 0.1);
+            --header-height: 60px; --tab-bar-height: 48px; --bottom-nav-height: 60px;
+            --panel-width: min(400px, 90vw);
+            --fast-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            --normal-transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { background-color: var(--bg-color); }
+        body {
+            margin: 0; padding: 0; width: 100%; height: 100vh; font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-color); color: var(--text-color); overflow: hidden;
+            display: flex; flex-direction: column;
+        }
+        .app-container { display: flex; flex-direction: column; height: 100%; }
+        #progress-bar { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--accent-color), #4a00e0); width: 0; z-index: 1000; transition: width 0.3s, opacity 0.3s; box-shadow: var(--glow-shadow); }
+
+        /* --- Main Layout States --- */
+        #home-view { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; transition: opacity var(--fast-transition), transform var(--fast-transition); }
+        #browser-view { display: flex; flex-direction: column; height: 100%; opacity: 0; transform: scale(0.98); transition: opacity var(--fast-transition), transform var(--fast-transition); pointer-events: none; }
+        body.state-browsing #home-view { opacity: 0; transform: scale(1.02); pointer-events: none; }
+        body.state-browsing #browser-view { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+        /* --- Home View --- */
+        .app-logo { font-size: 4.5em; font-weight: 700; color: var(--text-secondary-color); margin-bottom: 40px; user-select: none; }
+        .app-logo .logo-icon { width: 1.1em; height: 1.1em; margin-right: 0.35em; fill: var(--accent-color); }
+        .app-logo .logo-text span { color: var(--accent-color); animation: blink 1.4s 1s step-end infinite; } @keyframes blink { 50% { opacity: 0; } }
+        #home-search-form { width: 90%; max-width: 600px; }
+
+        /* --- Header & Search --- */
+        .search-input-wrapper { position: relative; width: 100%; background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: 12px; transition: all 0.3s; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        .search-input-wrapper:focus-within { border-color: var(--accent-color); box-shadow: 0 4px 20px rgba(0,0,0,0.2), var(--glow-shadow); }
+        .search-input-icon { position: absolute; top: 50%; left: 20px; transform: translateY(-50%); color: var(--text-secondary-color); pointer-events: none; }
+        .search-input { width: 100%; height: 60px; padding: 0 60px 0 56px; font-size: 18px; border: none; outline: 0; background-color: transparent; color: var(--text-color); }
+        .search-submit-btn { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); height: 44px; width: 44px; border: none; background-color: var(--accent-color); color: var(--header-bg); cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+        .search-submit-btn:hover { background-color: var(--accent-hover-color); }
+        .search-submit-btn.loading .search-icon { display: none; } .search-submit-btn:not(.loading) .loader-icon { display: none; }
+        .search-submit-btn .loader-icon { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* --- Browser View Header --- */
+        .app-header { display: flex; align-items: center; height: var(--header-height); padding: 0 12px; background: var(--header-bg-glass); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); z-index: 200; flex-shrink: 0; }
+        .header-button { flex-shrink: 0; width: 40px; height: 40px; background: transparent; border: none; border-radius: 8px; color: var(--text-color); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background-color 0.2s; }
+        .header-button:hover { background: var(--surface-color); }
+        #address-bar { flex-grow: 1; height: 40px; margin: 0 12px; background-color: var(--surface-color); border-radius: 8px; color: var(--text-secondary-color); font-size: 14px; display: flex; align-items: center; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* --- Tab Bar --- */
+        #tab-bar { position: relative; display: flex; align-items: center; height: var(--tab-bar-height); background: var(--header-bg); padding: 0 12px; overflow-x: auto; flex-shrink: 0; border-bottom: 1px solid var(--border-color); }
+        #tab-bar::-webkit-scrollbar { display: none; }
+        .tab-item { position: relative; display: flex; align-items: center; padding: 0 12px; height: 100%; flex-shrink: 0; cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
+        .tab-item.active { opacity: 1; }
+        .tab-item:hover { opacity: 1; }
+        .tab-content { display: flex; align-items: center; max-width: 200px; }
+        .tab-favicon { width: 20px; height: 20px; margin-right: 10px; border-radius: 4px; background-color: rgba(255,255,255,0.05); background-size: cover; background-position: center; flex-shrink: 0; position: relative; }
+        .tab-favicon .loader-icon { position: absolute; inset: 0; background: rgba(0,0,0,0.5); color: var(--accent-color); display: none; align-items: center; justify-content: center; animation: spin 1s linear infinite; }
+        .tab-item.loading .tab-favicon .loader-icon { display: flex; }
+        .tab-title { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tab-close-btn { width: 24px; height: 24px; background: transparent; border: none; border-radius: 50%; color: var(--text-secondary-color); display: flex; align-items: center; justify-content: center; margin-left: 8px; flex-shrink: 0; }
+        .tab-close-btn:hover { background: var(--surface-color); }
+        #active-tab-indicator { position: absolute; bottom: 0; height: 2px; background-color: var(--accent-color); transition: all var(--fast-transition); }
+        #add-tab-button { width: 36px; height: 36px; border-radius: 8px; background: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-color); flex-shrink: 0; margin-left: 8px; }
+
+        /* --- Main Content & Bottom Nav --- */
+        .content-wrapper { position: relative; flex-grow: 1; overflow: hidden; }
+        .page-container { position: absolute; inset: 0; display: flex; flex-direction: column; visibility: hidden; opacity: 0; transition: opacity 0.2s, visibility 0.2s; }
+        .page-container.active { visibility: visible; opacity: 1; }
+        .page-iframe { flex-grow: 1; border: none; background: transparent; }
+        #bottom-nav { position: absolute; bottom: 0; left: 0; width: 100%; height: var(--bottom-nav-height); background: var(--header-bg-glass); backdrop-filter: blur(20px); border-top: 1px solid var(--border-color); z-index: 15; display: flex; justify-content: space-around; align-items: center; }
+        .page-nav-button { flex-grow: 1; height: 100%; background: transparent; border: none; color: var(--text-color); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: background-color 0.2s, color 0.2s; }
+        .page-nav-button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .page-nav-button.active { color: var(--accent-color); }
+
+        /* --- Panels & Overlays (same as before, omitted for brevity) --- */
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 500; opacity: 0; transition: opacity var(--fast-transition); pointer-events: none; }
+        .overlay.visible { opacity: 1; pointer-events: auto; }
+        .panel { position: fixed; top: 0; right: 0; width: var(--panel-width); height: 100%; background: var(--header-bg); z-index: 501; transform: translateX(100%); transition: transform var(--normal-transition); display: flex; flex-direction: column; box-shadow: -10px 0 30px var(--shadow-dark); }
+        .panel.visible { transform: translateX(0); }
+        #history-header { padding: 16px; border-bottom: 1px solid var(--border-color); font-size: 18px; font-weight: 600; }
+        #history-list { flex-grow: 1; overflow-y: auto; padding: 8px; }
+        .history-item { display: flex; align-items: center; padding: 12px; border-radius: 8px; cursor: pointer; } .history-item:hover { background: var(--surface-color); }
+    </style>
+</head>
+<body class="state-home">
+    <div id="progress-bar"></div>
+    <div class="app-container">
+        <!-- Home View: Shown when no tabs are open -->
+        <div id="home-view">
+            <h1 class="app-logo">
+                <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2.03998C12.8906 2.03998 13.7812 2.18748 14.5312 2.48435L14.6094 2.5156L15.2188 2.7656L19.5938 4.48435C20.0781 4.67185 20.3594 5.17185 20.3594 5.68748V10.2656C20.3594 15.0781 17.3906 19.3593 13.0781 21.4062L12.5312 21.6875C12.3594 21.7812 12.1719 21.8281 11.9844 21.8281C11.8125 21.8281 11.625 21.7812 11.4531 21.6875L10.9062 21.4062C6.59375 19.3593 3.625 15.0781 3.625 10.2656V5.68748C3.625 5.17185 3.90625 4.67185 4.39062 4.48435L8.76562 2.7656L9.375 2.5156L9.45312 2.48435C10.2031 2.18748 11.0938 2.03998 11.9844 2.03998H12Z M12 7.00001C13.0753 7.00001 14.0994 7.42144 14.8284 8.1504C15.5574 8.87935 15.9788 9.90349 15.9788 11C15.9788 12.0965 15.5574 13.1206 14.8284 13.8496C14.0994 14.5786 13.0753 15 12 15C10.9247 15 9.90058 14.5786 9.17163 13.8496C8.44268 13.1206 8.02125 12.0965 8.02125 11C8.02125 9.90349 8.44268 8.87935 9.17163 8.1504C9.90058 7.42144 10.9247 7.00001 12 7.00001Z" /></svg>
+                <span class="logo-text">Aperture<span>.</span></span>
+            </h1>
+            <form id="home-search-form">
+                <div class="search-input-wrapper">
+                    <svg class="search-input-icon" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" class="search-input" placeholder="Search or enter a URL..." required autocomplete="off">
+                    <button type="submit" class="search-submit-btn" title="Search">
+                        <svg class="search-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        <svg class="loader-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Browser View: Main UI for browsing -->
+        <div id="browser-view">
+            <header class="app-header">
+                <button id="history-button" class="header-button" title="History"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
+                <div id="address-bar" title="Click to edit"></div>
+                <button id="burn-button" class="header-button" title="Burn Session"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2.5-2.5-2.5S6 10.62 6 12a2.5 2.5 0 0 0 2.5 2.5z"/><path d="M12 12h.01"/><path d="M17.5 14.5a2.5 2.5 0 0 0 2.5-2.5c0-1.38-.5-2.5-2.5-2.5s-2.5 1.12-2.5 2.5a2.5 2.5 0 0 0 2.5 2.5z"/><path d="M12 6.82c1.5-2.3 4.5-3.82 7.5-3.82 3.5 0 6.5 2.86 6.5 6.5A6.47 6.47 0 0 1 22.5 16c-2 2-5 3-7.5 3s-5.5-1-7.5-3A6.47 6.47 0 0 1 1.5 13c0-3.64 3-6.5 6.5-6.5 3 0 6 1.52 7.5 3.82z"/></svg></button>
+            </header>
+            <div id="tab-bar">
+                <div id="active-tab-indicator"></div>
+                <button id="add-tab-button" title="New Tab">+</button>
+            </div>
+            <main class="content-wrapper">
+                <div id="page-views"></div>
+                <nav id="bottom-nav">
+                    <button id="back-button" class="page-nav-button" title="Back"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                    <button id="forward-button" class="page-nav-button" title="Forward"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+                    <button id="reload-button" class="page-nav-button" title="Reload"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+                    <button id="mode-button" class="page-nav-button" title="Change Mode"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></button>
+                    <button id="external-link-button" class="page-nav-button" title="Open in New Tab"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+                </nav>
+            </main>
+        </div>
+    </div>
+
+    <!-- Overlays and Panels -->
+    <div id="history-overlay" class="overlay"></div>
+    <div id="history-panel" class="panel">
+        <h3 id="history-header">History</h3>
+        <div id="history-list"></div>
+    </div>
+    <!-- Other panels like mode-selection would go here -->
+
+    <!-- Templates for efficient DOM creation -->
+    <template id="tab-item-template">
+        <div class="tab-item">
+            <div class="tab-content">
+                <div class="tab-favicon">
+                    <svg class="loader-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                </div>
+                <span class="tab-title"></span>
+            </div>
+            <button class="tab-close-btn">×</button>
+        </div>
+    </template>
+    <template id="page-container-template">
+        <div class="page-container">
+            <iframe class="page-iframe" sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-top-navigation-by-user-activation" referrerpolicy="no-referrer"></iframe>
+            <!-- Reader view and error view would be here -->
+        </div>
+    </template>
+
+    <script type="module">
+        'use strict';
+        import { A1Engine } from './a1-engine.js';
+
+        // --- CONFIG & CONSTANTS ---
+        const SEARCH_ENGINE_URL = 'https://search.brave.com/search?q={q}&source=web';
+
+        // --- DOM ELEMENTS ---
+        const dom = {
+            body: document.body,
+            progressBar: document.getElementById('progress-bar'),
+            homeSearchForm: document.getElementById('home-search-form'),
+            addressBar: document.getElementById('address-bar'),
+            tabBar: document.getElementById('tab-bar'),
+            activeTabIndicator: document.getElementById('active-tab-indicator'),
+            addTabButton: document.getElementById('add-tab-button'),
+            pageViews: document.getElementById('page-views'),
+            backButton: document.getElementById('back-button'),
+            forwardButton: document.getElementById('forward-button'),
+            reloadButton: document.getElementById('reload-button'),
+            modeButton: document.getElementById('mode-button'),
+            externalLinkButton: document.getElementById('external-link-button'),
+            historyButton: document.getElementById('history-button'),
+            burnButton: document.getElementById('burn-button'),
+            historyOverlay: document.getElementById('history-overlay'),
+            historyPanel: document.getElementById('history-panel'),
+            historyList: document.getElementById('history-list'),
+            tabItemTemplate: document.getElementById('tab-item-template'),
+            pageContainerTemplate: document.getElementById('page-container-template'),
+        };
+
+        // --- STATE MANAGEMENT ---
+        const engine = new A1Engine();
+        let appState = { tabs: [], activeTabId: null, globalHistory: [] };
+
+        const saveState = () => {
+            try {
+                sessionStorage.setItem('aperture_session', JSON.stringify({ tabs: appState.tabs, activeTabId: appState.activeTabId }));
+                localStorage.setItem('aperture_history', JSON.stringify(appState.globalHistory));
+            } catch (e) { console.error("Failed to save state:", e); }
+        };
+
+        // --- CORE LOGIC ---
+        const navigateTo = async (url, tabId, pushToHistory = true, newMode = null) => {
+            const tab = getTabById(tabId);
+            if (!tab) return;
+
+            const cleanUrl = new URL(url).toString();
+            const mode = newMode || (tab.url === cleanUrl ? tab.mode : 'interactive');
+            
+            setLoadingState(tabId, true);
+            startProgress();
+
+            try {
+                const pageHTML = await engine.fetchPage(cleanUrl, { mode });
+                let doc = new DOMParser().parseFromString(pageHTML, 'text/html');
+                doc = engine.sanitizeAndInject(doc);
+                
+                const title = doc.title || cleanUrl.split('/')[2] || "Untitled";
+                const favicon = `https://icons.duckduckgo.com/ip3/${new URL(cleanUrl).hostname}.ico`;
+
+                tab.url = cleanUrl;
+                tab.title = title;
+                tab.favicon = favicon;
+                tab.mode = mode;
+                tab.error = null;
+
+                if (pushToHistory) {
+                    if (tab.history[tab.historyIndex] !== cleanUrl) {
+                        tab.history.splice(tab.historyIndex + 1);
+                        tab.history.push(cleanUrl);
+                        tab.historyIndex++;
+                    }
+                    appState.globalHistory.unshift({ url: cleanUrl, title, timestamp: Date.now() });
+                    if (appState.globalHistory.length > 200) appState.globalHistory.pop();
+                }
+                
+                renderPage(tab, doc);
+
+            } catch (error) {
+                tab.error = error.message;
+                // renderError(tab, 'Failed to Load Page', error.message);
+            } finally {
+                setLoadingState(tabId, false);
+                finishProgress();
+                renderTabs();
+                renderHistory();
+                updateNavControls();
+                saveState();
+            }
+        };
+
+        // --- UI RENDERING & UPDATES ---
+        const startProgress = () => { dom.progressBar.style.opacity='1'; dom.progressBar.style.width='90%'; };
+        const finishProgress = () => { dom.progressBar.style.width='100%'; setTimeout(() => { dom.progressBar.style.opacity='0'; dom.progressBar.style.width='0%'; }, 300); };
+        
+        const renderPage = (tab, doc) => {
+            const pageContainer = document.getElementById(`page-${tab.id}`);
+            if (!pageContainer) return;
+            const iframe = pageContainer.querySelector('.page-iframe');
+            const base = doc.createElement('base');
+            base.href = tab.url;
+            doc.head.prepend(base);
+            iframe.srcdoc = doc.documentElement.outerHTML;
+        };
+
+        const updateUI = () => {
+            const hasTabs = appState.tabs.length > 0;
+            dom.body.className = hasTabs ? 'state-browsing' : 'state-home';
+            updateNavControls();
+        };
+
+        const updateNavControls = () => {
+            const activeTab = getActiveTab();
+            if (activeTab) {
+                dom.addressBar.textContent = activeTab.url ? activeTab.url.replace(/^(https?:\/\/)?(www\.)?/, '') : 'New Tab';
+                dom.backButton.disabled = activeTab.historyIndex <= 0;
+                dom.forwardButton.disabled = activeTab.historyIndex >= activeTab.history.length - 1;
+            }
+        };
+
+        // --- TAB MANAGEMENT ---
+        const getTabById = id => appState.tabs.find(t => t.id === id);
+        const getActiveTab = () => getTabById(appState.activeTabId);
+
+        const addTab = (url = null, doSwitch = true) => {
+            const newTab = { id: Date.now(), url: null, title: 'New Tab', favicon: '', mode: 'interactive', history: [], historyIndex: -1, error: null, isLoading: false };
+            appState.tabs.push(newTab);
+            
+            const pageNode = dom.pageContainerTemplate.content.cloneNode(true);
+            pageNode.querySelector('.page-container').id = `page-${newTab.id}`;
+            dom.pageViews.appendChild(pageNode);
+
+            if (doSwitch) switchTab(newTab.id);
+            if (url) navigateTo(url, newTab.id);
+            
+            renderTabs();
+            updateUI();
+            saveState();
+            return newTab;
+        };
+
+        const switchTab = (tabId) => {
+            if (appState.activeTabId === tabId) return;
+            appState.activeTabId = tabId;
+            
+            appState.tabs.forEach(tab => {
+                document.getElementById(`page-${tab.id}`).classList.toggle('active', tab.id === tabId);
+            });
+            
+            renderTabs();
+            updateNavControls();
+            saveState();
+        };
+
+        const closeTab = (tabId) => {
+            const tabIndex = appState.tabs.findIndex(t => t.id === tabId);
+            if (tabIndex === -1) return;
+
+            appState.tabs.splice(tabIndex, 1);
+            document.getElementById(`page-${tabId}`).remove();
+
+            if (appState.activeTabId === tabId) {
+                const newActiveTab = appState.tabs[tabIndex] || appState.tabs[tabIndex - 1];
+                appState.activeTabId = newActiveTab ? newActiveTab.id : null;
+            }
+            
+            renderTabs();
+            updateUI();
+            saveState();
+        };
+
+        const renderTabs = () => {
+            const fragment = document.createDocumentFragment();
+            appState.tabs.forEach(tab => {
+                const tabNode = dom.tabItemTemplate.content.cloneNode(true);
+                const tabEl = tabNode.querySelector('.tab-item');
+                tabEl.dataset.id = tab.id;
+                tabEl.classList.toggle('active', tab.id === appState.activeTabId);
+                tabEl.classList.toggle('loading', tab.isLoading);
+                tabEl.querySelector('.tab-title').textContent = tab.title;
+                tabEl.querySelector('.tab-favicon').style.backgroundImage = `url('${tab.favicon}')`;
+                tabEl.querySelector('.tab-close-btn').dataset.id = tab.id;
+                fragment.appendChild(tabNode);
+            });
+            dom.tabBar.querySelectorAll('.tab-item').forEach(el => el.remove());
+            dom.tabBar.insertBefore(fragment, dom.addTabButton);
+            
+            // Animate active tab indicator
+            const activeTabEl = dom.tabBar.querySelector('.tab-item.active');
+            if (activeTabEl) {
+                dom.activeTabIndicator.style.left = `${activeTabEl.offsetLeft}px`;
+                dom.activeTabIndicator.style.width = `${activeTabEl.offsetWidth}px`;
+                dom.activeTabIndicator.style.opacity = '1';
+            } else {
+                dom.activeTabIndicator.style.opacity = '0';
+            }
+        };
+
+        const setLoadingState = (tabId, isLoading) => {
+            const tab = getTabById(tabId);
+            if (tab) {
+                tab.isLoading = isLoading;
+                const tabEl = dom.tabBar.querySelector(`.tab-item[data-id="${tabId}"]`);
+                if (tabEl) tabEl.classList.toggle('loading', isLoading);
+            }
+        };
+
+        // --- EVENT HANDLERS ---
+        const handleSearch = (query) => {
+            if (!query) return;
+            const url = /^(https?:\/\/)?([\w-]+\.)+[\w-]+(\/[\w-./?%&=]*)?$/.test(query) ? (!/^https?:\/\//.test(query) ? 'https://' + query : query) : SEARCH_ENGINE_URL.replace('{q}', encodeURIComponent(query));
+            
+            const activeTab = getActiveTab();
+            if (activeTab) navigateTo(url, activeTab.id);
+            else addTab(url);
+        };
+
+        const burnSession = () => {
+            if (!confirm('Are you sure you want to permanently delete all history and session data? This action cannot be undone.')) return;
+            startProgress();
+            localStorage.removeItem('aperture_history');
+            sessionStorage.removeItem('aperture_session');
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'BURN_SESSION' });
+                navigator.serviceWorker.addEventListener('message', () => window.location.reload(), { once: true });
+            } else {
+               setTimeout(() => window.location.reload(), 500);
+            }
+        };
+
+        const handleLaunchParams = () => { /* ... same as previous response ... */ };
+
+        // --- INITIALIZATION ---
+        const init = () => {
+            // Load State
+            try {
+                const sessionData = JSON.parse(sessionStorage.getItem('aperture_session'));
+                if (sessionData && sessionData.tabs && sessionData.tabs.length > 0) {
+                    appState.tabs = sessionData.tabs;
+                    appState.activeTabId = sessionData.activeTabId;
+                    appState.tabs.forEach(tab => {
+                        const pageNode = dom.pageContainerTemplate.content.cloneNode(true);
+                        pageNode.querySelector('.page-container').id = `page-${tab.id}`;
+                        dom.pageViews.appendChild(pageNode);
+                        if (tab.url && !tab.error) renderPage(tab, {documentElement: {outerHTML: ''}}); // Render empty page first
+                    });
+                    switchTab(appState.activeTabId);
+                }
+            } catch (e) { console.error("Failed to load state:", e); }
+            updateUI();
+            renderTabs();
+
+            // Event Listeners
+            dom.homeSearchForm.addEventListener('submit', e => { e.preventDefault(); handleSearch(e.target.querySelector('.search-input').value); });
+            dom.addressBar.addEventListener('click', () => { /* Future: implement editable address bar */ });
+            dom.addTabButton.addEventListener('click', () => addTab());
+            dom.tabBar.addEventListener('click', e => {
+                const tabItem = e.target.closest('.tab-item');
+                const closeBtn = e.target.closest('.tab-close-btn');
+                if (closeBtn) { e.stopPropagation(); closeTab(parseInt(closeBtn.dataset.id)); }
+                else if (tabItem) { switchTab(parseInt(tabItem.dataset.id)); }
+            });
+            dom.backButton.addEventListener('click', () => { const tab = getActiveTab(); if (tab && tab.historyIndex > 0) { tab.historyIndex--; navigateTo(tab.history[tab.historyIndex], tab.id, false); } });
+            dom.forwardButton.addEventListener('click', () => { const tab = getActiveTab(); if (tab && tab.historyIndex < tab.history.length - 1) { tab.historyIndex++; navigateTo(tab.history[tab.historyIndex], tab.id, false); } });
+            dom.reloadButton.addEventListener('click', () => { const tab = getActiveTab(); if (tab && tab.url) navigateTo(tab.url, tab.id, false); });
+            dom.burnButton.addEventListener('click', burnSession);
+            window.addEventListener('message', e => { if (e.data?.type === 'aperture-navigate' && e.data.url) { const tab = getActiveTab(); if (tab) navigateTo(e.data.url, tab.id); } });
+            
+            handleLaunchParams();
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('service-worker.js').catch(err => console.error('SW Registration Failed:', err));
+            }
+        };
+
+        init();
+    </script>
+</body>
+</html>
